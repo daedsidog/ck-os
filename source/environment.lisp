@@ -59,7 +59,7 @@ The stem is defined as the part of the PATH before the last slash."
   (check-type pathname (or string pathname))
   (let* ((pathname-name (namestring pathname))
          (sep (uiop:directory-separator-for-host pathname))
-         (index (or (position sep pathname-name :from-end t) 0))
+         (index (or (viewlet-position sep pathname-name :from-end t) 0))
          (stem (subseq pathname-name 0 index)))
     ;; If PATHNAME was an actual pathname, coerce the stem to be a pathname as
     ;; well, and not just a string.
@@ -75,6 +75,10 @@ that already exist: :SUPERCEDE to overwrite, :IGNORE or NIL to skip, or :ERROR
 to signal an error."
   (check-type source-dir (or string pathname))
   (check-type target-dir (or string pathname))
+  (when (pathnamep source-dir)
+    (setf source-dir (namestring source-dir)))
+  (when (pathnamep target-dir)
+    (setf target-dir (namestring target-dir)))
   (uiop:ensure-directory-pathname source-dir)
   (ensure-directories-exist target-dir)
   (dolist (file (directory (concatenate 'string source-dir "*.*")))
@@ -89,9 +93,25 @@ to signal an error."
         ((and (member on-conflict '(:ignore nil)) (probe-file target-file))
          nil)
         ((probe-file target-file)
-         (error "File/s already exists. Adjust the ON-CONFLICT key to supersede
+         (error "File/s already exists.  Adjust the ON-CONFLICT key to supersede
 or ignore on conflict."))
         (t
          (uiop:copy-file file target-file))))))
 
+(defun* host-cache-directory ()
+  "Return the cache directory for the current host as a pathname.
 
+Defaults to Unix-like systems' cache directory.
+Returns an error if the host OS is not recognized or its cache directory could
+not be determined."
+  (cond ((uiop:os-windows-p)
+         (uiop:parse-native-namestring
+          (uiop:native-namestring
+           "C:\\Users\\%USERNAME%\\AppData\\Local\\")))
+        ((uiop:os-macosx-p)
+         (uiop:parse-native-namestring
+          (uiop:native-namestring "~/Library/Caches/")))
+        ((uiop:os-unix-p)
+         (uiop:parse-native-namestring
+          (uiop:native-namestring "~/.cache/")))
+        (t (error "Could not determine the cache directory for this host."))))
