@@ -68,11 +68,16 @@ The stem is defined as the part of the PATH before the last slash."
         stem)))
 
 (defun* copy-directory-contents (source-dir target-dir &key
+                                            (clear nil)
                                             (on-conflict :error))
   "Copy contents of SOURCE-DIR to TARGET-DIR.
+
 ON-CONFLICT controls the behavior when encountering files in TARGET-DIR
 that already exist: :SUPERCEDE to overwrite, :IGNORE or NIL to skip, or :ERROR
-to signal an error."
+to signal an error.
+
+CLEAR controls whether or not the target directory is cleared before the files
+from the source directory are transferred there."
   (check-type source-dir (or string pathname))
   (check-type target-dir (or string pathname))
   (when (pathnamep source-dir)
@@ -81,6 +86,9 @@ to signal an error."
     (setf target-dir (namestring target-dir)))
   (uiop:ensure-directory-pathname source-dir)
   (ensure-directories-exist target-dir)
+  (when clear
+    (dolist (file (uiop:directory-files target-dir))
+      (delete-file file)))
   (dolist (file (directory (concatenate 'string source-dir "*.*")))
     (let ((target-file (concatenate 'string
                                     target-dir
@@ -93,8 +101,9 @@ to signal an error."
         ((and (member on-conflict '(:ignore nil)) (probe-file target-file))
          nil)
         ((probe-file target-file)
-         (error "File/s already exists.  Adjust the ON-CONFLICT key to supersede
-or ignore on conflict."))
+         (error (format nil "File '~A' already exists in the target directory.
+Adjust the ON-CONFFLICT key to supersede or ignore on conflict."
+                        target-file)))
         (t
          (uiop:copy-file file target-file))))))
 
