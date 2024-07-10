@@ -1,4 +1,7 @@
-(in-package #:candlekeep)
+(defpackage #:ck.io.environment
+  (:use #:cl #:ck.clle))
+
+(in-package #:ck.io.environment)
 
 (defun* check-program (program)
   "Check if a PROGRAM is available on the system's PATH, signal error if not."
@@ -111,12 +114,12 @@ Adjust the ON-CONFFLICT key to supersede or ignore on conflict."
   "Return the cache directory for the current host as a pathname.
 
 Defaults to Unix-like systems' cache directory.
-Returns an error if the host OS is not recognized or its cache directory could
-not be determined."
+Returns an error if the host OS is not recognized or its cache directory could not be determined."
   (cond ((uiop:os-windows-p)
-         (uiop:parse-native-namestring
-          (uiop:native-namestring
-           "C:\\Users\\%USERNAME%\\AppData\\Local\\")))
+         (let ((username (uiop:getenv "USERNAME")))
+           (uiop:parse-native-namestring
+            (uiop:native-namestring
+             (format nil "C:\\Users\\~A\\AppData\\Local\\" username)))))
         ((uiop:os-macosx-p)
          (uiop:parse-native-namestring
           (uiop:native-namestring "~/Library/Caches/")))
