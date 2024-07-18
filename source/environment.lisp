@@ -3,17 +3,24 @@
 
 (in-package #:ck.io.environment)
 
-(defun* check-program (program)
-  "Check if a PROGRAM is available on the system's PATH, signal error if not."
-  (check-type program string)
+(defun* program-exists-p (program)
+  "Returns non-nil if PROGRAM is available on the system path, nil otherwise."
   (let ((test-command (if (member :win32 *features*)
-                          (format nil "where ~a" program)
-                          (format nil "command -v ~a" program))))
-    (let ((exit-code (nth-value 2 (uiop:run-program test-command
-                                                    :ignore-error-status t))))
-      (unless (= exit-code 0)
-        (error (format nil "Program '~a' is not available in the system path."
-                       program))))))
+                          (format nil "where \"~A\"" program)
+                          (format nil "command -v \"~A\"" program))))
+    (multiple-value-bind (1st 2nd exit-code) (uiop:run-program test-command
+                                                               :ignore-error-status t)
+      (declare (ignore 1st 2nd))
+      (if (/= exit-code 0)
+          nil
+        exit-code))))
+
+(defun* check-program (program)
+  "Check if a PROGRAM is available on the system path signal error if not."
+  (check-type program string)
+  (when (program-exists-p program)
+    (error (format nil "Program '~a' unavailable in the system path."
+                   program))))
 
 (defun* host-arch ()
   "Determine the host architecture based on current Lisp features and return it
@@ -127,3 +134,21 @@ Returns an error if the host OS is not recognized or its cache directory could n
          (uiop:parse-native-namestring
           (uiop:native-namestring "~/.cache/")))
         (t (error "Could not determine the cache directory for this host."))))
+
+(defun* host-temporary-directory ()
+  "Return the temporary directory for the current host as a pathname.
+
+Defaults to Unix-like systems' temporary directory.
+Returns an error if host OS is not recognized or its temporary directory could not be determined."
+  (cond ((uiop:os-windows-p)
+         (let ((username (uiop:getenv "USERNAME")))
+           (uiop:parse-native-namestring
+            (uiop:native-namestring
+             (format nil "C:\\Users\\~A\\AppData\\Local\\Temp\\" username)))))
+        ((uiop:os-macosx-p)
+         (uiop:parse-native-namestring
+          (uiop:native-namestring "/tmp/")))
+        ((uiop:os-unix-p)
+         (uiop:parse-native-namestring
+          (uiop:native-namestring "/tmp/")))
+        (t (error "Could not determine the temporary directory for this host."))))
