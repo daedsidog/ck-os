@@ -1,6 +1,6 @@
-(defpackage #:ck.io
-  (:use #:cl #:ck.clle #:ck.io.environment))
+(defpackage #:ck-io
+  (:use #:cl #:ck-clle #:ck-io/environment))
 
-(in-package #:ck.io)
+(in-package #:ck-io)
 
-(export* #:ck.io.environment)
+(export-inherited-symbols #:ck-io/environment)

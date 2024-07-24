@@ -1,5 +1,6 @@
-(defsystem #:ck.io
+(defsystem #:ck-io
   :components ((:module "source"
                 :components ((:file "environment")
+                             #+os-windows (:file "windows")
                              (:file "io" :depends-on ("environment")))))
-  :depends-on (#:ck.clle))
+  :depends-on (#:ck-clle #:cffi))

@@ -1,9 +1,20 @@
-(defpackage #:ck.io.environment
-  (:use #:cl #:ck.clle))
+(defpackage #:ck-io/environment
+  (:use #:cl #:ck-clle)
+  (:export #:program-exists-p
+           #:check-program
+           #:system-architecture
+           #:os-string
+           #:absolute-pathname
+           #:relative-pathname
+           #:pathname-stem
+           #:copy-directory-contents
+           #:system-cache-directory
+           #:system-temporary-directory
+           #:window-shown-p))
 
-(in-package #:ck.io.environment)
+(in-package #:ck-io/environment)
 
-(defun* program-exists-p (program)
+(defun program-exists-p (program)
   "Returns non-nil if PROGRAM is available on the system path, nil otherwise."
   (let ((test-command (if (member :win32 *features*)
                           (format nil "where \"~A\"" program)
@@ -15,23 +26,23 @@
           nil
         exit-code))))
 
-(defun* check-program (program)
+(defun check-program (program)
   "Check if a PROGRAM is available on the system path signal error if not."
   (check-type program string)
   (when (program-exists-p program)
     (error (format nil "Program '~a' unavailable in the system path."
                    program))))
 
-(defun* host-arch ()
-  "Determine the host architecture based on current Lisp features and return it
+(defun system-architecture ()
+  "Determine the system architecture based on current Lisp features and return it
 as a string."
   (cond
     ((member :x86-64 *features*)
      "x86_64")
     (t "x86")))
 
-(defun* host-os (&key (downcase t))
-  "Determine the host operating system based on current Lisp features and return
+(defun os-string (&key (downcase t))
+  "Determine the environment's operating system based on current Lisp features and return
 it as a string.
 If the DOWNCASE keyword argument is T, the resulting string is downcased."
   (let ((os-tag
@@ -41,7 +52,7 @@ If the DOWNCASE keyword argument is T, the resulting string is downcased."
             (t "Unknown"))))
     (if downcase (string-downcase os-tag) os-tag)))
 
-(defun* absolute-pathname (pathname)
+(defun absolute-pathname (pathname)
   "Return the absolute pathname of the given PATHNAME.
 If PATHNAME is already absolute, it is returned directly."
   (check-type pathname (or string pathname))
@@ -49,7 +60,7 @@ If PATHNAME is already absolute, it is returned directly."
       pathname
       (merge-pathnames pathname (uiop:getcwd))))
 
-(defun* relative-pathname (pathname)
+(defun relative-pathname (pathname)
   "Return the relative pathname from the current directory to PATHNAME.
 If PATHNAME is relative, it is returned directly."
   (check-type pathname (or string pathname))
@@ -63,7 +74,7 @@ If PATHNAME is relative, it is returned directly."
                      (length (uiop:native-namestring cwd))))
             (error "PATHNAME must be absolute or relative.")))))
 
-(defun* pathname-stem (pathname)
+(defun pathname-stem (pathname)
   "Extract and return the stem of the provided PATHNAME.
 The stem is defined as the part of the PATH before the last slash."
   (check-type pathname (or string pathname))
@@ -77,7 +88,7 @@ The stem is defined as the part of the PATH before the last slash."
         (pathname stem)
         stem)))
 
-(defun* copy-directory-contents (source-dir target-dir &key
+(defun copy-directory-contents (source-dir target-dir &key
                                             (clear nil)
                                             (on-conflict :error))
   "Copy contents of SOURCE-DIR to TARGET-DIR.
@@ -117,11 +128,11 @@ Adjust the ON-CONFFLICT key to supersede or ignore on conflict."
         (t
          (uiop:copy-file file target-file))))))
 
-(defun* host-cache-directory ()
-  "Return the cache directory for the current host as a pathname.
+(defun system-cache-directory ()
+  "Return the cache directory for the current platform as a pathname.
 
 Defaults to Unix-like systems' cache directory.
-Returns an error if the host OS is not recognized or its cache directory could not be determined."
+Returns an error if the current platform's cache directory could not be determined."
   (cond ((uiop:os-windows-p)
          (let ((username (uiop:getenv "USERNAME")))
            (uiop:parse-native-namestring
@@ -133,9 +144,9 @@ Returns an error if the host OS is not recognized or its cache directory could n
         ((uiop:os-unix-p)
          (uiop:parse-native-namestring
           (uiop:native-namestring "~/.cache/")))
-        (t (error "Could not determine the cache directory for this host."))))
+        (t (error "Could not determine the cache directory for the current platform."))))
 
-(defun* host-temporary-directory ()
+(defun system-temporary-directory ()
   "Return the temporary directory for the current host as a pathname.
 
 Defaults to Unix-like systems' temporary directory.
@@ -152,3 +163,6 @@ Returns an error if host OS is not recognized or its temporary directory could n
          (uiop:parse-native-namestring
           (uiop:native-namestring "/tmp/")))
         (t (error "Could not determine the temporary directory for this host."))))
+
+(defgeneric window-shown-p (pid)
+  (:documentation "Return non-nil if the window associated with PID is currently shown (visible)."))
