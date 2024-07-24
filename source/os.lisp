@@ -1,31 +1,14 @@
-(defpackage #:ck-io/environment
-  (:use #:cl #:ck-clle)
-  (:export #:program-exists-p
-           #:check-program
-           #:system-architecture
-           #:os-string
-           #:absolute-pathname
-           #:relative-pathname
-           #:pathname-stem
-           #:copy-directory-contents
-           #:system-cache-directory
-           #:system-temporary-directory
-           #:window-shown-p))
+(defpackage #:ck-os
+  (:use #:cl #:ck-clle
+        #+win32 #:ck-os/windows
+        #+unix #:ck-os/unix))
 
-(in-package #:ck-io/environment)
+(in-package #:ck-os)
 
-(defun program-exists-p (program)
-  "Returns non-nil if PROGRAM is available on the system path, nil otherwise."
-  (let ((test-command (if (member :win32 *features*)
-                          (format nil "where \"~A\"" program)
-                          (format nil "command -v \"~A\"" program))))
-    (multiple-value-bind (1st 2nd exit-code) (uiop:run-program test-command
-                                                               :ignore-error-status t)
-      (declare (ignore 1st 2nd))
-      (if (/= exit-code 0)
-          nil
-        exit-code))))
+(export-inherited-symbols #+unix :ck-os/unix
+                          #+win32 :ck-os/windows)
 
+#+(or unix win32)
 (defun check-program (program)
   "Check if a PROGRAM is available on the system path signal error if not."
   (check-type program string)
@@ -34,16 +17,17 @@
                    program))))
 
 (defun system-architecture ()
-  "Determine the system architecture based on current Lisp features and return it
-as a string."
+  "Determine the system architecture based on current Lisp features and return it as a string."
   (cond
     ((member :x86-64 *features*)
      "x86_64")
-    (t "x86")))
+    ((member :x86 *features))
+    (t "unknown")))
 
 (defun os-string (&key (downcase t))
-  "Determine the environment's operating system based on current Lisp features and return
-it as a string.
+  "Determine the environment's operating system based on current Lisp features and return it as a
+string.
+
 If the DOWNCASE keyword argument is T, the resulting string is downcased."
   (let ((os-tag
           (cond
@@ -127,42 +111,3 @@ Adjust the ON-CONFFLICT key to supersede or ignore on conflict."
                         target-file)))
         (t
          (uiop:copy-file file target-file))))))
-
-(defun system-cache-directory ()
-  "Return the cache directory for the current platform as a pathname.
-
-Defaults to Unix-like systems' cache directory.
-Returns an error if the current platform's cache directory could not be determined."
-  (cond ((uiop:os-windows-p)
-         (let ((username (uiop:getenv "USERNAME")))
-           (uiop:parse-native-namestring
-            (uiop:native-namestring
-             (format nil "C:\\Users\\~A\\AppData\\Local\\" username)))))
-        ((uiop:os-macosx-p)
-         (uiop:parse-native-namestring
-          (uiop:native-namestring "~/Library/Caches/")))
-        ((uiop:os-unix-p)
-         (uiop:parse-native-namestring
-          (uiop:native-namestring "~/.cache/")))
-        (t (error "Could not determine the cache directory for the current platform."))))
-
-(defun system-temporary-directory ()
-  "Return the temporary directory for the current host as a pathname.
-
-Defaults to Unix-like systems' temporary directory.
-Returns an error if host OS is not recognized or its temporary directory could not be determined."
-  (cond ((uiop:os-windows-p)
-         (let ((username (uiop:getenv "USERNAME")))
-           (uiop:parse-native-namestring
-            (uiop:native-namestring
-             (format nil "C:\\Users\\~A\\AppData\\Local\\Temp\\" username)))))
-        ((uiop:os-macosx-p)
-         (uiop:parse-native-namestring
-          (uiop:native-namestring "/tmp/")))
-        ((uiop:os-unix-p)
-         (uiop:parse-native-namestring
-          (uiop:native-namestring "/tmp/")))
-        (t (error "Could not determine the temporary directory for this host."))))
-
-(defgeneric window-shown-p (pid)
-  (:documentation "Return non-nil if the window associated with PID is currently shown (visible)."))
