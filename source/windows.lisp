@@ -1,32 +1,31 @@
 (defpackage #:ck-os/windows
   (:use #:cl #:ck-clle #:cffi)
   (:export
-   ;; USER32
+   ;; GENERAL
    #:program-exists-p
    #:cache-directory
    #:temporary-directory
+   ;; USER32
    #:open-process-handle
    #:close-handle
    #:read-process-memory
    #:with-process-handle
-   ;; GDI32
+   #:window-visible-p
    #:process-windows
    #:process-visible-windows
-   #:window-visible-p))
+   #:window-device-context
+   #:window-dimensions
+   #:window-resolution
+   ;; GDI32
+   #:create-solid-brush
+   #:destroy-gdi-object
+   #:fill-rectangle))
 
 (in-package #:ck-os/windows)
 
-;;; USER32
+;;; GENERAL
 
 (defparameter +default-buffer-max-size+ 1024)
-
-(defvar *user32-library-loaded* nil)
-
-(defmacro ensure-user32 ()
-  `(progn
-     (unless *user32-library-loaded*
-       (load-foreign-library "user32.dll")
-       (setf *user32-library-loaded* t))))
 
 (defun program-exists-p (program)
   "Returns non-nil if PROGRAM is available on the system path, nil otherwise for Win32 systems."
@@ -51,7 +50,18 @@
      (uiop:native-namestring
       (format nil "C:\\Users\\~A\\AppData\\Local\\Temp\\" username)))))
 
-(defun last-system-error ()
+;; USER32
+
+(defvar *user32-library-loaded* nil)
+
+(defmacro defun-user32 (name lambda-list &body body)
+  `(defun ,name ,lambda-list
+     (unless *user32-library-loaded*
+       (load-foreign-library "user32.dll")
+       (setf *user32-library-loaded* t))
+     ,@body))
+
+(defun-user32 last-system-error ()
   (foreign-funcall "GetLastError" :uint32))
 
 (defcenum process-access-rights
@@ -60,7 +70,7 @@
   (:write            #x40000000)
   (:duplicate-handle #x00000040))
 
-(defun open-process-handle (pid &optional process-access-rights inherit-handle)
+(defun-user32 open-process-handle (pid &optional process-access-rights inherit-handle)
   (let ((process-access-rights (or process-access-rights
                                    (foreign-enum-value 'process-access-rights
                                                             :all-access)))
@@ -76,7 +86,7 @@
                (last-system-error)))
       handle)))
 
-(defun close-handle (handle)
+(defun-user32 close-handle (handle)
   (let ((success (foreign-funcall "CloseHandle"
                                        :pointer handle
                                        :bool)))
@@ -100,7 +110,7 @@ PROCESS can also be a PID of the process.
 
 This function returns the native Lisp type associated with the foreign type."))
 
-(defun %read-process-memory (process-handle address type &optional max-size)
+(defun-user32 %read-process-memory (process-handle address type &optional max-size)
   (let* ((type (if (member type '(:dword))
                    :uint32
                    type))
@@ -154,10 +164,9 @@ This function returns the native Lisp type associated with the foreign type."))
         (push window-handle (gethash (mem-ref pid :uint32) pid-window-table)))
       t))
 
-  (defun process-windows (pid)
+  (defun-user32 process-windows (pid)
     "Return a list of all the windows associated with the PID."
-    (ensure-user32)
-    (with-foreign-object (pid-store :uint32)
+        (with-foreign-object (pid-store :uint32)
       (setf (mem-ref pid-store :uint32) pid)
       (setf (gethash pid pid-window-table) ())
       (unless (foreign-funcall "EnumWindows"
@@ -170,14 +179,13 @@ This function returns the native Lisp type associated with the foreign type."))
       (prog1 (gethash pid pid-window-table)
         (remhash pid pid-window-table)))))
 
-(defun window-visible-p (window-handle)
+(defun-user32 window-visible-p (window-handle)
   "Check if a Windows window associated with a given WINDOW-HANDLE is shown (visible)."
-  (ensure-user32)
-  (foreign-funcall "IsWindowVisible"
+    (foreign-funcall "IsWindowVisible"
                    :pointer window-handle
                    :boolean))
 
-(defun process-visible-windows (pid)
+(defun-user32 process-visible-windows (pid)
   "Return a list of the visible window handles of the PID."
   (remove-if-not #'window-visible-p (process-windows pid)))
 
@@ -187,8 +195,8 @@ This function returns the native Lisp type associated with the foreign type."))
   (right  :long)
   (bottom :long))
 
-(defun window-dimensions (window-handle)
-  (with-foreign-object (rect '(:struct rect))
+(defun-user32 window-dimensions (window-handle)
+    (with-foreign-object (rect '(:struct rect))
     (unless (foreign-funcall "GetClientRect"
                                   :pointer window-handle
                                   :pointer rect
@@ -201,23 +209,31 @@ This function returns the native Lisp type associated with the foreign type."))
             (foreign-slot-value rect '(:struct rect) 'right)
             (foreign-slot-value rect '(:struct rect) 'bottom))))
 
-(defun window-resolution (window-handle)
-  (multiple-value-bind (left top right bottom) (window-dimensions window-handle)
+(defun-user32 window-resolution (window-handle)
+    (multiple-value-bind (left top right bottom) (window-dimensions window-handle)
     (declare (ignore left top))
     (values right bottom)))
+
+(defun-user32 release-device-context (window-handle hdc)
+  "Release the device context of the WINDOW-HANDLE."
+    (foreign-funcall "ReleaseDC"
+                   :pointer window-handle
+                   :pointer hdc
+                   :int))
 
 ;;; GDI32
 
 (defvar *gdi32-library-loaded* nil)
+
+(defmacro defun-gdi32 (name lambda-list &body body)
+  `(defun ,name ,lambda-list
+     (unless *gdi32-library-loaded*
+       (load-foreign-library "gdi32.dll")
+       (setf *gdi32-library-loaded* t))
+     ,@body))
   
-(defmacro ensure-gdi32 ()
-  `(unless *gdi32-library-loaded*
-     (load-foreign-library "gdi32.dll")
-     (setf *gdi32-library-loaded* t)))
-  
-(defun window-device-context (window-handle)
+(defun-gdi32 window-device-context (window-handle)
   "Return the device context of the WINDOW-HANDLE."
-  (ensure-gdi32)
   (foreign-funcall "GetDC"
                    :pointer window-handle
                    :pointer))
@@ -262,10 +278,40 @@ This function returns the native Lisp type associated with the foreign type."))
   (:desktop-horizontal-resolution      118)
   (:blt-alignment                      119))
 
-(defun device-capabilities (device-context index)
-  (ensure-gdi32)
+(defun-gdi32 device-capabilities (device-context index)
   (foreign-funcall "GetDeviceCaps"
                    :pointer device-context
                    :int (foreign-enum-value 'device-capabilities-index
                                             index)
                    :int))
+
+(defun-gdi32 create-solid-brush (color)
+  (let ((brush (foreign-funcall "CreateSolidBrush"
+                                :uint32 color
+                                :pointer)))
+    (when (eq brush #.(null-pointer))
+      (error "Failed to create solid brush: WinAPI error ~A" (last-system-error)))
+    brush))
+
+(defun-gdi32 destroy-gdi-object (object)
+  (let ((success (foreign-funcall "DeleteObject"
+                                  :pointer object
+                                  :bool)))
+    (unless success
+      (error "Failed to delete GDI object: WinAPI error ~A" (last-system-error)))
+    success))
+
+(defun-gdi32 fill-rectangle (device-context brush &key left right top bottom)
+  (with-foreign-object (rect '(:struct rect))
+    (setf (foreign-slot-value rect '(:struct rect) 'left) left)
+    (setf (foreign-slot-value rect '(:struct rect) 'right) right)
+    (setf (foreign-slot-value rect '(:struct rect) 'top) top)
+    (setf (foreign-slot-value rect '(:struct rect) 'bottom) bottom)
+    (let ((success (foreign-funcall "FillRect"
+                                    :pointer device-context
+                                    :pointer rect
+                                    :pointer brush
+                                    :bool)))
+      (unless success
+        (error "Failed to fill rectangle: WinAPI error ~A" (last-system-error)))
+      success)))
