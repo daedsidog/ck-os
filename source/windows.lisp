@@ -349,3 +349,16 @@ This function returns the native Lisp type associated with the foreign type."))
       (unless success
         (error "Failed to fill rectangle: WinAPI error ~A" (last-system-error)))
       success)))
+
+(defun-gdi32 draw-text-on-dc (hdc text length rect format draw-text-params)
+  (with-foreign-string (string text)
+    (let ((result (foreign-funcall "DrawText"
+                                   :pointer hdc
+                                   :pointer string
+                                   :int length
+                                   :pointer rect
+                                   :uint32 format
+                                   :int)))
+      (when (zerop result) 
+        (error "Failed to draw text on ~A: WinAPI error ~A" hdc (last-system-error)))
+      result)))

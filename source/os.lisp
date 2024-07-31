@@ -1,12 +1,9 @@
-(defpackage #:ck-os
-  (:use #:cl #:ck-clle
-        #+win32 #:ck-os/windows
-        #+unix #:ck-os/unix))
+(uiop:define-package #:ck-os
+  (:use #:cl #:ck-clle)
+  (:use-reexport #+win32 #:ck-os/windows
+                 #+unix #:ck-os/unix))
 
 (in-package #:ck-os)
-
-(export-inherited-symbols #+unix :ck-os/unix
-                          #+win32 :ck-os/windows)
 
 #+(or unix win32)
 (defun check-program (program)
