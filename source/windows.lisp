@@ -10,12 +10,14 @@
    #:close-handle
    #:read-process-memory
    #:with-process-handle
+   #:list-windows
    #:window-visible-p
-   #:process-windows
-   #:process-visible-windows
+   #:windows-containing-title-substring
+   #:list-visible-windows
+   #:windows-of-pid
+   #:visible-windows-of-pid
    #:window-device-context
    #:window-dimensions
-   #:window-resolution
    ;; GDI32
    #:create-solid-brush
    #:destroy-gdi-object
@@ -25,7 +27,11 @@
 
 ;;; GENERAL
 
-(defparameter +default-buffer-max-size+ 1024)
+(defparameter +buffer-max-size+ 1024)
+
+(defconstant +string-encoding+
+  #+little-endian :ucs-2le
+  #+big-endian :ucs-2be)
 
 (defun program-exists-p (program)
   "Returns non-nil if PROGRAM is available on the system path, nil otherwise for Win32 systems."
@@ -115,7 +121,7 @@ This function returns the native Lisp type associated with the foreign type."))
                    :uint32
                    type))
          (size (if (eql type :string)
-                   (or max-size +default-buffer-max-size+)
+                   (or max-size +buffer-max-size+)
                    (foreign-type-size type))))
     (with-foreign-pointer (buffer size)
       (let ((success (foreign-funcall "ReadProcessMemory"
@@ -148,36 +154,49 @@ This function returns the native Lisp type associated with the foreign type."))
                                 address type &optional max-size)
   (%read-process-memory process-handle address type max-size))
 
-(let ((pid-window-table (make-hash-table)))
-  
-  (defcallback window-enumeration-callback :bool ((window-handle :pointer) (pid-store :pointer))
-    (with-foreign-object (pid :uint32)
-      (let ((tid (foreign-funcall "GetWindowThreadProcessId"
-                               :pointer window-handle
-                               :pointer pid
-                               :uint32)))
-        (when (zerop tid)
-          (error "Could not get creator PID of window ~A: WinAPI error ~A"
-                 window-handle
-                 (last-system-error))))
-      (when (= (mem-ref pid-store :uint32) (mem-ref pid :uint32))
-        (push window-handle (gethash (mem-ref pid :uint32) pid-window-table)))
-      t))
+(let ((busy nil)
+      (windows ()))
+                                
+  (defcallback %window-enumeration-callback :bool ((window-handle :pointer) (unused :pointer))
+    (declare (ignore unused))
+    (push window-handle windows))
 
-  (defun-user32 process-windows (pid)
-    "Return a list of all the windows associated with the PID."
-        (with-foreign-object (pid-store :uint32)
-      (setf (mem-ref pid-store :uint32) pid)
-      (setf (gethash pid pid-window-table) ())
-      (unless (foreign-funcall "EnumWindows"
-                               :pointer (callback window-enumeration-callback)
-                               :pointer pid-store
-                               :bool)
-        (error "Could not enumerate windows of PID ~A: WinAPI error ~A"
-               pid
+  (defun-user32 list-windows ()
+    "Return a list of all top-level windows."
+    (loop while busy)
+    (setf busy t)
+    (setf windows ())
+    (unwind-protect 
+         (progn
+           (with-foreign-object (dummy-pointer :pointer)
+             (unless (foreign-funcall "EnumWindows"
+                                      :pointer (callback %window-enumeration-callback)
+                                      ;; This pointer is unused, but required to prevent a memory
+                                      ;; fault.  I don't know why this happens.
+                                      :pointer dummy-pointer
+                                      :bool)
+               (error "Could not enumerate windows: WinAPI error ~A"
+                      (last-system-error))))
+           windows)
+      (when busy
+        (setf busy nil)
+        (setf windows ())))))
+
+(defun-user32 window-pid (window-handle)
+  (with-foreign-object (pid :uint32)
+    (let ((tid (foreign-funcall "GetWindowThreadProcessId"
+                                :pointer window-handle
+                                :pointer pid
+                                :uint32)))
+      (when (zerop tid)
+        (error "Could not get creator PID of window ~A: WinAPI error ~A"
+               window-handle
                (last-system-error)))
-      (prog1 (gethash pid pid-window-table)
-        (remhash pid pid-window-table)))))
+      (mem-ref pid :uint32))))
+
+(defun-user32 windows-of-pid (pid)
+  "Return a list of all the windows associated with the PID."
+  (remove-if-not (lambda (wh) (eq (window-pid wh) pid)) (list-windows)))
 
 (defun-user32 window-visible-p (window-handle)
   "Check if a Windows window associated with a given WINDOW-HANDLE is shown (visible)."
@@ -185,9 +204,13 @@ This function returns the native Lisp type associated with the foreign type."))
                    :pointer window-handle
                    :boolean))
 
-(defun-user32 process-visible-windows (pid)
+(defun-user32 list-visible-windows ()
+  "Return a list of all visible top-level windows."
+  (remove-if-not #'window-visible-p (list-windows)))
+
+(defun-user32 visible-windows-of-pid (pid)
   "Return a list of the visible window handles of the PID."
-  (remove-if-not #'window-visible-p (process-windows pid)))
+  (remove-if-not #'window-visible-p (windows-of-pid pid)))
 
 (defcstruct rect
   (left   :long)
@@ -198,9 +221,9 @@ This function returns the native Lisp type associated with the foreign type."))
 (defun-user32 window-dimensions (window-handle)
     (with-foreign-object (rect '(:struct rect))
     (unless (foreign-funcall "GetClientRect"
-                                  :pointer window-handle
-                                  :pointer rect
-                                  :bool)
+                             :pointer window-handle
+                             :pointer rect
+                             :bool)
       (error "Could not get window dimensions of ~A: WinAPI error ~A"
              window-handle
              (last-system-error)))
@@ -209,10 +232,7 @@ This function returns the native Lisp type associated with the foreign type."))
             (foreign-slot-value rect '(:struct rect) 'right)
             (foreign-slot-value rect '(:struct rect) 'bottom))))
 
-(defun-user32 window-resolution (window-handle)
-    (multiple-value-bind (left top right bottom) (window-dimensions window-handle)
-    (declare (ignore left top))
-    (values right bottom)))
+;;; GDI32
 
 (defun-user32 release-device-context (window-handle hdc)
   "Release the device context of the WINDOW-HANDLE."
@@ -221,7 +241,21 @@ This function returns the native Lisp type associated with the foreign type."))
                    :pointer hdc
                    :int))
 
-;;; GDI32
+(defun window-title (window-handle)
+  "Retrieve the title of the window associated with WINDOW-HANDLE."
+  (with-foreign-pointer (title +buffer-max-size+)
+    (let ((string-length (foreign-funcall "GetWindowTextW"
+                                          :pointer window-handle
+                                          :pointer title
+                                          :int +buffer-max-size+
+                                          :uint32)))
+      (unless (zerop string-length)
+        (foreign-string-to-lisp title :encoding +string-encoding+)))))
+
+(defun-user32 windows-containing-title-substring (substring)
+  "Return a list of all the windows whose titles contain the SUBSTRING.  Case insensitive."
+  (remove-if-not (lambda (wh) (search substring (window-title wh) :test #'equalp))
+                 (list-windows)))
 
 (defvar *gdi32-library-loaded* nil)
 
