@@ -1,7 +1,7 @@
 (uiop:define-package #:ck-os
   (:use #:cl #:ck-clle)
-  (:use-reexport #+win32 #:ck-os/windows
-                 #+unix #:ck-os/unix))
+  (:use-reexport #+win32 #:ck-os/win32/os
+                 #+unix #:ck-os/unix/os))
 
 (in-package #:ck-os)
 

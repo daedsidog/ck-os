@@ -1,7 +1,13 @@
 (defsystem #:ck-os
   :components ((:module "source"
-                :components ((:file "windows" :if-feature :win32)
-                             (:file "unix" :if-feature :unix)
-                             (:file "os" :depends-on ("unix" "windows")))))
+                :components ((:module "win32" :if-feature :win32
+                              :components ((:file "common")
+                                           (:file "user32" :depends-on ("common"))
+                                           (:file "gdi32" :depends-on ("common"))
+                                           (:file "os" :depends-on ("common" "user32" "gdi32"))))
+                             (:module "unix" :if-feature :unix
+                              :components ((:file "os")))
+                             (:file "os" :depends-on ("unix" "win32")))))
   :depends-on (#:ck-clle 
-               (:if-feature (:or :unix :win32) #:cffi)))
+               #+(or win32 unix) #:cffi
+               #+(or win32 unix) #:trivial-garbage))
