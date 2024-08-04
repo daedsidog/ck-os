@@ -2,11 +2,23 @@
   (:use #:cl #:ck-clle #:cffi)
   (:export #:+buffer-max-size+
            #:+string-encoding+
+           #:rect
            #:make-rect
            #:rect-left
            #:rect-top
            #:rect-right
-           #:rect-bottom))
+           #:rect-bottom
+           #:rect-width
+           #:rect-height
+           #:rect-x-incf
+           #:rect-y-incf
+           #:rect-x-decf
+           #:rect-y-decf
+           #:rect-incf
+           #:rect-inc
+           #:rect-decf
+           #:rect-dec
+           #:normalize-rect))
 
 (in-package #:ck-os/win32/common)
         
@@ -73,3 +85,59 @@
 
 (defmethod (setf rect-bottom) ((value integer) (rect rect))
   (setf (foreign-slot-value (pointer-of rect) '(:struct %rect) 'bottom) value))
+
+(defmethod rect-width ((rect rect))
+  (- (rect-right rect) (rect-left rect)))
+
+(defmethod rect-height ((rect rect))
+  (- (rect-bottom rect) (rect-top rect)))
+
+(defmethod rect-x-incf ((rect rect) &optional (delta 1))
+  (incf (rect-left rect) delta)
+  (incf (rect-right rect) delta))
+
+(defmethod rect-y-incf ((rect rect) &optional (delta 1))
+  (incf (rect-top rect) delta)
+  (incf (rect-bottom rect) delta))
+
+(defmethod rect-x-decf ((rect rect) &optional (delta 1))
+  (incf (rect-left rect) (- delta))
+  (incf (rect-right rect) (- delta)))
+
+(defmethod rect-y-decf ((rect rect) &optional (delta 1))
+  (incf (rect-top rect) (- delta))
+  (incf (rect-bottom rect) (- delta)))
+
+(defmethod rect-incf ((rect rect) &optional (delta 1))
+  (decf (rect-left rect) delta)
+  (decf (rect-top rect) delta)
+  (incf (rect-right rect) delta)
+  (incf (rect-bottom rect) delta))
+
+(defmethod rect-decf ((rect rect) &optional (delta 1))
+  (incf (rect-left rect) delta)
+  (incf (rect-top rect) delta)
+  (decf (rect-right rect) delta)
+  (decf (rect-bottom rect) delta))
+
+(defmethod rect-inc ((rect rect) &optional (delta 1))
+  (let ((new-rect (make-rect
+                   :left (rect-left rect)
+                   :top (rect-top rect)
+                   :right (rect-right rect)
+                   :bottom (rect-bottom rect))))
+    (rect-incf new-rect delta)
+    new-rect))
+
+(defmethod rect-dec ((rect rect) &optional (delta 1))
+  (let ((new-rect (make-rect
+                   :left (rect-left rect)
+                   :top (rect-top rect)
+                   :right (rect-right rect)
+                   :bottom (rect-bottom rect))))
+    (rect-decf new-rect delta)
+    new-rect))
+
+(defmethod normalize-rect ((rect rect))
+  (make-rect :right (rect-width rect)
+             :bottom (rect-height rect)))

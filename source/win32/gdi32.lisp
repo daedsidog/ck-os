@@ -1,11 +1,16 @@
 (defpackage #:ck-os/win32/gdi32
   (:use #:cl #:ck-clle #:cffi #:ck-os/win32/common)
   (:export #:create-solid-brush
-           #:destroy-gdi-object
+           #:delete-object
            #:fill-rectangle
            #:set-text-color
            #:set-text-transparent-bg
-           #:set-text-bg-color))
+           #:set-text-bg-color
+           #:create-compatible-dc
+           #:create-compatible-bitmap
+           #:select-object
+           #:destroy-dc
+           #:bit-blit))
 
 (in-package #:ck-os/win32/gdi32)
 
@@ -24,45 +29,47 @@
                    :pointer window-handle
                    :pointer))
 
+
 (defcenum device-capabilities-index
-  (:driver-version                      0)
-  (:technology                          2)
-  (:horizontal-size                     4)
-  (:vertical-size                       6)
-  (:horizontal-resolution               8)
-  (:vertical-resolution                10)
-  (:bits-per-pixel                     12)
-  (:planes                             14)
-  (:number-of-brushes                  16)
-  (:number-of-pens                     18)
-  (:number-of-fonts                    22)
-  (:number-of-colors                   24)
-  (:device-size                        26)
-  (:curve-capabilities                 28)
-  (:line-capabilities                  30)
-  (:polygonal-capabilities             32)
-  (:text-capabilities                  34)
-  (:clip-capabilities                  36)
-  (:raster-capabilities                38)
-  (:relative-width                     40)
-  (:relative-height                    42)
-  (:diagonal-width                     44)
-  (:shade-blend-capabilities           45)
-  (:horizontal-pixels-per-logical-inch 88)
-  (:vertical-pixels-per-logical-inch   90)
-  (:size-palette                       104)
-  (:number-of-reserved                 106)
-  (:color-resolution                   108)
-  (:physical-width                     110)
-  (:physical-height                    111)
-  (:physical-horizontal-offset         112)
-  (:physical-vertical-offset           113)
-  (:horizontal-scaling-factor          114)
-  (:vertical-scaling-factor            115)
-  (:vertical-refresh                   116)
-  (:desktop-vertical-resolution        117)
-  (:desktop-horizontal-resolution      118)
-  (:blt-alignment                      119))
+  (:driverversion   0)
+  (:technology      2)
+  (:horzsize        4)
+  (:vertsize        6)
+  (:horzres         8)
+  (:vertres         10)
+  (:bitspixel       12)
+  (:planes          14)
+  (:numbrushes      16)
+  (:numpens         18)
+  (:numfonts        22)
+  (:numcolors       24)
+  (:pdevicesize     26)
+  (:curvecaps       28)
+  (:linecaps        30)
+  (:polygonalcaps   32)
+  (:textcaps        34)
+  (:clipcaps        36)
+  (:rastercaps      38)
+  (:aspectx         40)
+  (:aspecty         42)
+  (:aspectxy        44)
+  (:logpixelsx      88)
+  (:logpixelsy      90)
+  (:sizepalette     104)
+  (:numreserved     106)
+  (:colorres        108)
+  (:physicalwidth   110)
+  (:physicalheight  111)
+  (:physicaloffsetx 112)
+  (:physicaloffsety 113)
+  (:scalingfactorx  114)
+  (:scalingfactory  115)
+  (:vrefresh        116)
+  (:desktopvertres  117)
+  (:desktophorzres  118)
+  (:bltalignment    119)
+  (:shadeblendcaps  120)
+  (:colormgmtcaps   121))
 
 (libdefun device-capabilities (device-context index)
   (foreign-funcall "GetDeviceCaps"
@@ -79,7 +86,7 @@
       (error "Failed to create solid brush: WinAPI error ~A" (last-system-error)))
     brush))
 
-(libdefun destroy-gdi-object (object)
+(libdefun delete-object (object)
   (let ((success (foreign-funcall "DeleteObject"
                                   :pointer object
                                   :bool)))
@@ -98,7 +105,7 @@
     success))
 
 (defcenum color-references
-  (:invalid-color #xffffffff))
+  (:clr-invalid #xffffffff))
 
 (libdefun set-text-bg-color (device-context color)
   (let ((result (foreign-funcall "SetBkColor"
@@ -132,3 +139,87 @@
     (when (zerop result)
       (error "Failed to set background mode: WinAPI error ~A" (last-system-error)))
     result))
+
+(libdefun create-compatible-dc (hdc)
+          (let ((memory-dc (foreign-funcall "CreateCompatibleDC"
+                                            :pointer hdc
+                                            :pointer)))
+            (when (eq memory-dc #.(null-pointer))
+              (error "Failed to create compatible DC: WinAPI error ~A" (last-system-error)))
+            memory-dc))
+
+(libdefun destroy-dc (hdc)
+  (unless (zerop (foreign-funcall "DeleteDC" :pointer hdc :int))
+    (error "Failed to delete DC: WinAPI error ~A" (last-system-error))))
+
+(libdefun create-compatible-bitmap (hdc width height)
+          (let ((bitmap (foreign-funcall "CreateCompatibleBitmap"
+                                         :pointer hdc
+                                         :int width
+                                         :int height
+                                         :pointer)))
+            (when (eq bitmap #.(null-pointer))
+              (error "Failed to create compatible bitmap: WinAPI error ~A" (last-system-error)))
+            bitmap))
+
+(libdefun select-object (hdc gdi-object)
+          (let ((previous-object (foreign-funcall "SelectObject"
+                                                  :pointer hdc
+                                                  :pointer gdi-object
+                                                  :pointer)))
+            (when (eq previous-object #.(null-pointer))
+              (error "Failed to select object into DC: WinAPI error ~A" (last-system-error)))
+            previous-object))
+
+(defcenum raster-operations
+  (:srccopy     #x00CC0020)
+  (:srcpaint    #x00EE0086)
+  (:srcand      #x008800C6)
+  (:srcinvert   #x00660046)
+  (:srcerase    #x00440328)
+  (:notsrccopy  #x00330008)
+  (:notsrcerase #x001100A6)
+  (:mergecopy   #x00C000CA)
+  (:mergepaint  #x00BB0226)
+  (:patcopy     #x00F00021)
+  (:patpaint    #x00FB0A09)
+  (:patinvert   #x005A0049)
+  (:dstinvert   #x00550009)
+  (:blackness   #x00000042)
+  (:whiteness   #x00FF0062))
+
+(libdefun bit-blit (source-hdc source-x source-y width height
+                               target-hdc target-x target-y)
+          (let ((success (foreign-funcall "BitBlt"
+                                          :pointer target-hdc
+                                          :int target-x
+                                          :int target-y
+                                          :int width
+                                          :int height
+                                          :pointer source-hdc
+                                          :int source-x
+                                          :int source-y
+                                          :uint32 #.(foreign-enum-value 'raster-operations
+                                                                        :blackness)
+                                          :bool)))
+            (unless success
+              (error "Failed to blit: WinAPI error ~A" (last-system-error)))
+            success))
+
+;; (libdefun create-font (font-height is-bold
+;;   (foreign-funcall "CreateFontA"
+;;                    :int cHeight
+;;                    :int cWidth
+;;                    :int cEscapement
+;;                    :int cOrientation
+;;                    :int cWeight
+;;                    :uint32 bItalic
+;;                    :uint32 bUnderline
+;;                    :uint32 bStrikeOut
+;;                    :uint32 iCharSet
+;;                    :uint32 iOutPrecision
+;;                    :uint32 iClipPrecision
+;;                    :uint32 iQuality
+;;                    :uint32 iPitchAndFamily
+;;                    :string pszFaceName
+;;                    :pointer))

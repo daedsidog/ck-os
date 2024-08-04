@@ -12,20 +12,6 @@
            #:visible-windows-of-pid
            #:window-device-context
            #:window-dimensions
-           #:+tff-top-align+
-           #:+tff-left-align+
-           #:+tff-center-align+
-           #:+tff-right-align+
-           #:+tff-vertical-center-align+
-           #:+tff-bottom-align+
-           #:+tff-word-break+
-           #:+tff-single-line+
-           #:+tff-expand-tabs+
-           #:+tff-tab-stop+
-           #:+tff-no-clip+
-           #:+tff-external-leading+
-           #:+tff-calculate-rectangle+
-           #:+tff-no-prefix+
            #:draw-text))
 
 (in-package #:ck-os/win32/user32)
@@ -219,38 +205,24 @@ This function returns the native Lisp type associated with the foreign type."))
                  (list-windows)))
 
 (defcenum text-format-flags
-  (:top-align                 #x000)
-  (:left-align                #x000)
-  (:center-align              #x001)
-  (:right-align               #x002)
-  (:vertical-center-align     #x004)
-  (:bottom-align              #x008)
-  (:word-break                #x010)
-  (:single-line               #x020)
-  (:expand-tabs               #x040)
-  (:tab-stop                  #x080)
-  (:no-clip                   #x100)
-  (:external-leading          #x200)
-  (:calculate-rectangle       #x400)
-  (:no-prefix                 #x800))
-
-(defconstant +tff-top-align+               #x000)
-(defconstant +tff-left-align+              #x000)
-(defconstant +tff-center-align+            #x001)
-(defconstant +tff-right-align+             #x002)
-(defconstant +tff-vertical-center-align+   #x004)
-(defconstant +tff-bottom-align+            #x008)
-(defconstant +tff-word-break+              #x010)
-(defconstant +tff-single-line+             #x020)
-(defconstant +tff-expand-tabs+             #x040)
-(defconstant +tff-tab-stop+                #x080)
-(defconstant +tff-no-clip+                 #x100)
-(defconstant +tff-external-leading+        #x200)
-(defconstant +tff-calculate-rectangle+     #x400)
-(defconstant +tff-no-prefix+               #x800)
+  (:dt-top                      #x00000000)
+  (:dt-left                     #x00000000)
+  (:dt-center                   #x00000001)
+  (:dt-right                    #x00000002)
+  (:dt-vcenter                  #x00000004)
+  (:dt-bottom                   #x00000008)
+  (:dt-wordbreak                #x00000010)
+  (:dt-singleline               #x00000020)
+  (:dt-expandtabs               #x00000040)
+  (:dt-tabstop                  #x00000080)
+  (:dt-noclip                   #x00000100)
+  (:dt-externalleading          #x00000200)
+  (:dt-calcrect                 #x00000400)
+  (:dt-noprefix                 #x00000800)
+  (:dt-internal                 #x00001000))
 
 ;; ASCII text support only
-(libdefun draw-text (hdc text length rect format)
+(libdefun draw-text (hdc text length rect format &optional only-calculate-rect)
   (with-foreign-string (string text)
     (let ((result (foreign-funcall "DrawTextA"
                                    :pointer hdc
@@ -260,5 +232,5 @@ This function returns the native Lisp type associated with the foreign type."))
                                    :uint32 format
                                    :int)))
       (when (zerop result) 
-        (error "Failed to draw text on ~A: WinAPI error ~A" hdc (last-system-error)))
-      result)))
+        (error "Failed to draw text on ~A: WinAPI error ~A" hdc (last-system-error)))))
+  rect)
