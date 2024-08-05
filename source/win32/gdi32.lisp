@@ -206,20 +206,99 @@
               (error "Failed to blit: WinAPI error ~A" (last-system-error)))
             success))
 
-;; (libdefun create-font (font-height is-bold
-;;   (foreign-funcall "CreateFontA"
-;;                    :int cHeight
-;;                    :int cWidth
-;;                    :int cEscapement
-;;                    :int cOrientation
-;;                    :int cWeight
-;;                    :uint32 bItalic
-;;                    :uint32 bUnderline
-;;                    :uint32 bStrikeOut
-;;                    :uint32 iCharSet
-;;                    :uint32 iOutPrecision
-;;                    :uint32 iClipPrecision
-;;                    :uint32 iQuality
-;;                    :uint32 iPitchAndFamily
-;;                    :string pszFaceName
-;;                    :pointer))
+(defcenum character-set
+  (:ansi-charset        #x00000000)
+  (:default-charset     #x00000001)
+  (:symbol-charset      #x00000002)
+  (:mac-charset         #x0000004D)
+  (:shiftjis-charset    #x00000080)
+  (:hangul-charset      #x00000081)
+  (:johab-charset       #x00000082)
+  (:gb2312-charset      #x00000086)
+  (:chinesebig5-charset #x00000088)
+  (:greek-charset       #x000000A1)
+  (:turkish-charset     #x000000A2)
+  (:vietnamese-charset  #x000000A3)
+  (:hebrew-charset      #x000000B1)
+  (:arabic-charset      #x000000B2)
+  (:baltic-charset      #x000000BA)
+  (:russian-charset     #x000000CC)
+  (:thai-charset        #x000000DE)
+  (:easteurope-charset  #x000000EE)
+  (:oem-charset         #x000000FF))
+
+(defcenum output-precision
+  (:out-default-precis        #x00000000)
+  (:out-string-precis         #x00000001)
+  (:out-stroke-precis         #x00000003)
+  (:out-tt-precis             #x00000004)
+  (:out-device-precis         #x00000005)
+  (:out-raster-precis         #x00000006)
+  (:out-tt-only-precis        #x00000007)
+  (:out-outline-precis        #x00000008)
+  (:out-screen-outline-precis #x00000009)
+  (:out-ps-only-precis        #x0000000A))
+
+(defcenum font-quality
+  (:default-quality        #x00)
+  (:draft-quality          #x01)
+  (:proof-quality          #x02)
+  (:nonantialiased-quality #x03)
+  (:antialiased-quality    #x04)
+  (:cleartype-quality      #x05))
+
+(defcenum font-weight
+  (:fw-dontcare 0)
+  (:fw-thin 100)
+  (:fw-extralight 200)
+  (:fw-ultralight 200)
+  (:fw-light 300)
+  (:fw-normal 400)
+  (:fw-regular 400)
+  (:fw-medium 500)
+  (:fw-semibold 600)
+  (:fw-demibold 600)
+  (:fw-bold 700)
+  (:fw-extrabold 800)
+  (:fw-ultrabold 800)
+  (:fw-heavy 900)
+  (:fw-black 900))
+
+(defconstant +font-weight-alist+
+  '((:thin        . :fw-thin)
+    (:extra-light . :fw-extralight)
+    (:ultra-light . :fw-extralight)
+    (:light       . :fw-light)
+    (:normal      . :fw-normal)
+    (:regular     . :fw-regular)
+    (:medium      . :fw-medium)
+    (:semibold    . :fw-semibold)
+    (:demibold    . :fw-semibold)
+    (:bold        . :fw-bold)
+    (:extra-bold  . :fw-extrabold)
+    (:ultra-bold  . :fw-extrabold)
+    (:heavy       . :fw-heavy)
+    (:black       . :fw-heavy)))
+
+(libdefun create-font (height weight italic underline strikeout face)
+  (let ((weight (cdr (assoc weight +font-weight-alist+))))
+    (unless weight
+      (error "Invalid weight argument.  Valid arguments are one of: ~{~A~^, ~}"
+             (mapcar (lambda (w) (car w)) +font-weight-alist+)))
+    (with-foreign-string (face-string face)
+      (foreign-funcall "CreateFontA"
+                       :int height
+                       :int 0
+                       :int 0
+                       :int 0
+                       :int (foreign-enum-value 'font-weight weight)
+                       :uint32 italic
+                       :uint32 underline
+                       :uint32 strikeout
+                       :uint32 #.(foreign-enum-value 'character-set :ansi-charset)
+                       :uint32 #.(foreign-enum-value 'output-precision :out-default-precis)
+                       :uint32 #.(foreign-enum-value 'output-precision :out-default-precis)
+                       :uint32 #.(foreign-enum-value 'font-quality :default-quality)
+                       :uint32 0
+                       :string face-string
+                       :pointer))))
