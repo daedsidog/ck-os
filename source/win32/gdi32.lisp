@@ -10,7 +10,8 @@
            #:create-compatible-bitmap
            #:select-object
            #:destroy-dc
-           #:bit-blit))
+           #:bit-blit
+           #:create-font))
 
 (in-package #:ck-os/win32/gdi32)
 
@@ -22,13 +23,6 @@
        (load-foreign-library "gdi32.dll")
        (setf *library-loaded* t))
      ,@body))
-
-(libdefun window-device-context (window-handle)
-  "Return the device context of the WINDOW-HANDLE."
-  (foreign-funcall "GetDC"
-                   :pointer window-handle
-                   :pointer))
-
 
 (defcenum device-capabilities-index
   (:driverversion   0)
@@ -264,7 +258,7 @@
   (:fw-heavy 900)
   (:fw-black 900))
 
-(defconstant +font-weight-alist+
+(defparameter +font-weight-alist+
   '((:thin        . :fw-thin)
     (:extra-light . :fw-extralight)
     (:ultra-light . :fw-extralight)

@@ -204,6 +204,12 @@ This function returns the native Lisp type associated with the foreign type."))
   (remove-if-not (lambda (wh) (search substring (window-title wh) :test #'equalp))
                  (list-windows)))
 
+(libdefun window-device-context (window-handle)
+  "Return the device context of the WINDOW-HANDLE."
+  (foreign-funcall "GetDC"
+                   :pointer window-handle
+                   :pointer))
+
 (defcenum text-format-flags
   (:dt-top                      #x00000000)
   (:dt-left                     #x00000000)
@@ -221,16 +227,48 @@ This function returns the native Lisp type associated with the foreign type."))
   (:dt-noprefix                 #x00000800)
   (:dt-internal                 #x00001000))
 
+(defparameter +text-justification-alist+
+  '((:start        . #.(logior
+                        (foreign-enum-value 'text-format-flags ':dt-left)
+                        (foreign-enum-value 'text-format-flags ':dt-top)))
+    (:top-start    . #.(logior
+                        (foreign-enum-value 'text-format-flags ':dt-top)
+                        (foreign-enum-value 'text-format-flags ':dt-left)))
+    (:top          . #.(logior
+                        (foreign-enum-value 'text-format-flags ':dt-top)
+                        (foreign-enum-value 'text-format-flags ':dt-center)))
+    (:top-end      . #.(logior
+                        (foreign-enum-value 'text-format-flags ':dt-top)
+                        (foreign-enum-value 'text-format-flags ':dt-right)))
+    (:bottom-end   . #.(logior
+                        (foreign-enum-value 'text-format-flags ':dt-bottom)
+                        (foreign-enum-value 'text-format-flags ':dt-right)))
+    (:bottom       . #.(logior
+                        (foreign-enum-value 'text-format-flags ':dt-bottom)
+                        (foreign-enum-value 'text-format-flags ':dt-center)))
+    (:bottom-start . #.(logior
+                        (foreign-enum-value 'text-format-flags ':dt-bottom)
+                        (foreign-enum-value 'text-format-flags ':dt-left)))
+    (:center       . #.(logior
+                        (foreign-enum-value 'text-format-flags ':dt-center)
+                        (foreign-enum-value 'text-format-flags ':dt-vcenter)))))
+
 ;; ASCII text support only
-(libdefun draw-text (hdc text length rect format &optional only-calculate-rect)
-  (with-foreign-string (string text)
-    (let ((result (foreign-funcall "DrawTextA"
-                                   :pointer hdc
-                                   :pointer string
-                                   :int length
-                                   :pointer (pointer-of rect)
-                                   :uint32 format
-                                   :int)))
-      (when (zerop result) 
-        (error "Failed to draw text on ~A: WinAPI error ~A" hdc (last-system-error)))))
-  rect)
+(libdefun draw-text (hdc text length rect justification &optional only-calculate-rect)
+  (let ((format (cdr (assoc justification +text-justification-alist+))))
+    (unless format
+      (error "Invalid justification argument.  Valid arguments are one of: ~{~A~^, ~}"
+             (mapcar #'car +text-justification-alist+)))
+    (with-foreign-string (string text)
+      (when only-calculate-rect
+        (setf format (logior format (foreign-enum-value 'text-format-flags :dt-calcrect))))
+      (let ((result (foreign-funcall "DrawTextA"
+                                     :pointer hdc
+                                     :pointer string
+                                     :int length
+                                     :pointer (pointer-of rect)
+                                     :uint32 format
+                                     :int)))
+        (when (zerop result) 
+          (error "Failed to draw text on ~A: WinAPI error ~A" hdc (last-system-error)))))
+    rect))
