@@ -18,7 +18,7 @@
            #:rect-inc
            #:rect-decf
            #:rect-dec
-           #:normalize-rect))
+           #:normalized-rect))
 
 (in-package #:ck-os/win32/common)
         
@@ -61,6 +61,12 @@
         (error (e)
           (foreign-free pointer)
           (error e))))))
+
+(defmethod copy-rect ((r rect))
+  (make-rect :left   (rect-left   r)
+             :right  (rect-right  r)
+             :top    (rect-top    r)
+             :bottom (rect-bottom r)))
 
 (defmethod rect-left ((rect rect))
   (foreign-slot-value (pointer-of rect) '(:struct %rect) 'left))
@@ -138,6 +144,6 @@
     (rect-decf new-rect delta)
     new-rect))
 
-(defmethod normalize-rect ((rect rect))
+(defmethod normalized-rect ((rect rect))
   (make-rect :right (rect-width rect)
              :bottom (rect-height rect)))
